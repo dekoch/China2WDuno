@@ -159,6 +159,8 @@ End Function
 
 
 Scheduler:
+   Timer2 = Timer2_Preload
+
    Incr T
 
    Reset Flaga1
@@ -173,7 +175,7 @@ Scheduler:
       Case 5:
          Flaga2 = 1
 
-      Case 9
+      Case 8
          Flaga3 = 1
          T = 0
 
