@@ -76,9 +76,6 @@ Config PORTC.0 = Output
 qUSTrig Alias PortC.0
 
 
-'Input PullUp / PullDown
-iUSEcho = 0 '0 = PullDown
-
 
 'Variables, Subs and Functions
 Declare Sub SelectNextTask()
@@ -94,7 +91,10 @@ Dim Flaga3 As Bit
 Enable Interrupts
 
 
-'Init Output State
+'Init State
+'Input PullUp / PullDown
+iUSEcho = 0 '0 = PullDown
+
 qMotorIn1 = 0
 qMotorIn2 = 0
 qMotorIn3 = 0
@@ -103,6 +103,23 @@ qLED = 0 '0 = LED off
 qUSTrig = 0
 
 Servo(1) = 50
+
+
+'hello sequence
+qLed = 1
+
+Waitms 500
+
+qLed = 0
+
+Waitms 500
+
+qLed = 1
+
+Wait 1
+
+qLed = 0
+
 
 
 Do
@@ -133,22 +150,43 @@ End
 
 
 
-
+'HC-SR04
+'ultrasonic sensor
+'Trigger 10us
+'Echo 150us..25ms (38ms if no obstacle found)
+'Ranging Distance 2..400 cm
 Function GetUSDistance() As Word
 
    Local wOutput As Word
+   Dim mValid As Bit
 
-   Pulseout PortC , 0 , 20 'Min. 10us pulse
+   mValid = 1
 
-   Pulsein wOutput , PinC , 1 , 1 'read distance
 
-   If Err = 0 Then
-      wOutput = wOutput * 10 'calcullate to
-      wOutput = wOutput / 58 ' centimeters
-      'wOutput = wOutput / 6 ' milimeters
+   Pulseout PortC , 0 , 20 'min. 10us pulse
+
+   Pulsein wOutput , PinC , 1 , 1 'read distance, timeout 655.35ms
+
+
+   'Pulsein timeout
+   If Err = 1 Then
+
+      mValid = 0
+   End If
+
+   'sensor timeout
+   If wOutput > 30 Then
+
+      mValid = 0
+   End If
+
+
+   If mValid = 1 Then
+      wOutput = wOutput / 58 'centimeters
+
       GetUSDistance = wOutput
    Else
-      'Pulsein timed out
+      'timed out
       GetUSDistance = 0
    End If
 End Function

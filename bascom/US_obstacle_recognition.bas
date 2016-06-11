@@ -34,6 +34,7 @@ $framesize = 60
 '                    A4 (18)        PC.4              SDA (I2C)            IIC
 '                    A5 (19)        PC.5              SCL (I2C)            IIC
 
+Config Watchdog = 2048
 
 Config Com1 = 57600 , Synchrone = 0 , Parity = None , Stopbits = 1 , Databits = 8 , Clockpol = 0
 
@@ -76,9 +77,6 @@ Config PORTC.0 = Output
 qUSTrig Alias PortC.0
 
 
-'Input PullUp / PullDown
-iUSEcho = 0 '0 = PullDown
-
 
 'Variables, Subs and Functions
 Declare Sub SelectNextTask()
@@ -91,11 +89,14 @@ Dim Flaga1 As Bit
 Dim Flaga2 As Bit
 Dim Flaga3 As Bit
 
+Dim sTemp As Single
+Dim sOffset As Single
+
 Const cMeasPoints = 18
 Dim bCurrMeasPoint As Byte
 Dim wUSMeasPoints(cMeasPoints) As Word
 Dim bUSWaitTime As Byte
-Dim mSearchLeft As Bit
+Dim mSearchRight As Bit
 Dim bNewDirection As Byte
 
 
@@ -103,6 +104,9 @@ Enable Interrupts
 
 
 'Init State
+'Input PullUp / PullDown
+iUSEcho = 0 '0 = PullDown
+
 qMotorIn1 = 0
 qMotorIn2 = 0
 qMotorIn3 = 0
@@ -110,13 +114,34 @@ qMotorIn4 = 0
 qLED = 0 '0 = LED off
 qUSTrig = 0
 
-bNewDirection = 50
+bCurrMeasPoint = 1
+bNewDirection = 90 '0 = right / 90 = middle / 180 = left
 
 Servo(1) = 0
 
 
+'hello sequence
+qLed = 1
+
+Waitms 500
+
+qLed = 0
+
+Waitms 500
+
+qLed = 1
+
+Wait 1
+
+qLed = 0
+
+
+
 Do
+   Start Watchdog
+
    '-----------------------------
+   'movement control
    Task1:
 
 
@@ -124,6 +149,7 @@ Do
 
 
    '-----------------------------
+   'communication
    Task2:
 
 
@@ -131,7 +157,9 @@ Do
 
 
    '-----------------------------
+   'obstacle recognition
    Task3:
+   'task needs 38ms if no obstacle found
 
    If bUSWaitTime = 0 Then
 
@@ -142,22 +170,22 @@ Do
       Dim mMeasComplete As Bit
 
       'decide which direction for next measuring point
-      If mSearchLeft = 0 Then
+      If mSearchRight = 0 Then
 
          bCurrMeasPoint = bCurrMeasPoint + 1
 
          If bCurrMeasPoint >= cMeasPoints Then
 
-            mSearchLeft = 1
+            mSearchRight = 1
             mMeasComplete = 1
          End If
       Else
 
          bCurrMeasPoint = bCurrMeasPoint - 1
 
-         If bCurrMeasPoint <= 0 Then
+         If bCurrMeasPoint <= 1 Then
 
-            mSearchLeft = 0
+            mSearchRight = 0
             mMeasComplete = 1
          End If
       End If
@@ -210,22 +238,44 @@ Do
          End If
 
          'if left and right measuring point (relative to max. value)
-         'is over average, then set new direction
+         'is over average, then set new direction 0..180 degree
          If mFreeDirection = 1 Then
 
-            bNewDirection = bIndex
+            sTemp = cMeasPoints - 1
+            sTemp = 180 / sTemp
+
+            sOffset = sTemp
+
+            sTemp = sTemp * bIndex
+            sTemp = sTemp - sOffset
+
+            bNewDirection = sTemp
+
+            Print "New Direction: " ; bNewDirection
          End If
       End If
 
 
       'set servo angle
-      Servo(1) = bCurrMeasPoint * 10
+      'measuring points 1..18 = servo signal 0..100 = 0..180 degree
+      sTemp = cMeasPoints - 1
+      sTemp = 100 / sTemp
+
+      sOffset = sTemp
+
+      sTemp = sTemp * bCurrMeasPoint
+      sTemp = sTemp - sOffset
+
+      Servo(1) = sTemp
+
 
       bUSWaitTime = 10 'wait min. 10ms for servo
    End If
 
    Call SelectNextTask()
 
+
+   Stop Watchdog
 Loop
 
 
@@ -233,22 +283,43 @@ End
 
 
 
-
+'HC-SR04
+'ultrasonic sensor
+'Trigger 10us
+'Echo 150us..25ms (38ms if no obstacle found)
+'Ranging Distance 2..400 cm
 Function GetUSDistance() As Word
 
    Local wOutput As Word
+   Dim mValid As Bit
 
-   Pulseout PortC , 0 , 20 'Min. 10us pulse
+   mValid = 1
 
-   Pulsein wOutput , PinC , 1 , 1 'read distance
 
-   If Err = 0 Then
-      wOutput = wOutput * 10 'calcullate to
-      wOutput = wOutput / 58 ' centimeters
-      'wOutput = wOutput / 6 ' milimeters
+   Pulseout PortC , 0 , 20 'min. 10us pulse
+
+   Pulsein wOutput , PinC , 1 , 1 'read distance, timeout 655.35ms
+
+
+   'Pulsein timeout
+   If Err = 1 Then
+
+      mValid = 0
+   End If
+
+   'sensor timeout
+   If wOutput > 30 Then
+
+      mValid = 0
+   End If
+
+
+   If mValid = 1 Then
+      wOutput = wOutput / 58 'centimeters
+
       GetUSDistance = wOutput
    Else
-      'Pulsein timed out
+      'timed out
       GetUSDistance = 0
    End If
 End Function
@@ -266,6 +337,7 @@ Function GetUSAverage() As Word
 
    lAverage = lAverage / cMeasPoints
 
+   GetUSAverage = lAverage
 End Function
 
 
