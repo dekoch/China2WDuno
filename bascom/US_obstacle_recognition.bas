@@ -83,6 +83,7 @@ iUSEcho = 0 '0 = PullDown
 'Variables, Subs and Functions
 Declare Sub SelectNextTask()
 Declare Function GetUSDistance() As Word
+Declare Function GetUSAverage() As Word
 
 'pseudo multitasking
 Dim T As Byte
@@ -90,11 +91,18 @@ Dim Flaga1 As Bit
 Dim Flaga2 As Bit
 Dim Flaga3 As Bit
 
+Const cMeasPoints = 18
+Dim bCurrMeasPoint As Byte
+Dim wUSMeasPoints(cMeasPoints) As Word
+Dim bUSWaitTime As Byte
+Dim mSearchLeft As Bit
+Dim bNewDirection As Byte
+
 
 Enable Interrupts
 
 
-'Init Output State
+'Init State
 qMotorIn1 = 0
 qMotorIn2 = 0
 qMotorIn3 = 0
@@ -102,7 +110,9 @@ qMotorIn4 = 0
 qLED = 0 '0 = LED off
 qUSTrig = 0
 
-Servo(1) = 50
+bNewDirection = 50
+
+Servo(1) = 0
 
 
 Do
@@ -123,6 +133,96 @@ Do
    '-----------------------------
    Task3:
 
+   If bUSWaitTime = 0 Then
+
+      'mesure distance and log value into array
+      wUSMeasPoints(bCurrMeasPoint) = GetUSDistance()
+
+
+      Dim mMeasComplete As Bit
+
+      'decide which direction for next measuring point
+      If mSearchLeft = 0 Then
+
+         bCurrMeasPoint = bCurrMeasPoint + 1
+
+         If bCurrMeasPoint >= cMeasPoints Then
+
+            mSearchLeft = 1
+            mMeasComplete = 1
+         End If
+      Else
+
+         bCurrMeasPoint = bCurrMeasPoint - 1
+
+         If bCurrMeasPoint <= 0 Then
+
+            mSearchLeft = 0
+            mMeasComplete = 1
+         End If
+      End If
+
+      'if series of measurements is complete, set new direction
+      If mMeasComplete = 1 Then
+
+         Dim b As Byte
+
+         For b = 1 To cMeasPoints
+
+            Print "US Points: " ; wUSMeasPoints(b)
+         Next b
+
+
+         Dim bIndex As Byte
+         Dim wMaxValue As Word
+         Dim wLeftValue As Word
+         Dim wRightValue As Word
+         Dim wAverage As Word
+         Dim mFreeDirection As Bit
+
+         mFreeDirection = 1
+
+
+         wAverage = GetUSAverage()
+
+         Print "US Average: " ; wAverage
+
+
+         Max(wUSMeasPoints(1) , wMaxValue , bIndex)
+
+
+         If bIndex > 0 Then
+            wLeftValue = wUSMeasPoints(bIndex - 1)
+
+            If wLeftValue < wAverage Then
+
+               mFreeDirection = 0
+            End If
+         End If
+
+         If bIndex < cMeasPoints Then
+            wRightValue = wUSMeasPoints(bIndex + 1)
+
+            If wRightValue < wAverage Then
+
+               mFreeDirection = 0
+            End If
+         End If
+
+         'if left and right measuring point (relative to max. value)
+         'is over average, then set new direction
+         If mFreeDirection = 1 Then
+
+            bNewDirection = bIndex
+         End If
+      End If
+
+
+      'set servo angle
+      Servo(1) = bCurrMeasPoint * 10
+
+      bUSWaitTime = 10 'wait min. 10ms for servo
+   End If
 
    Call SelectNextTask()
 
@@ -154,6 +254,21 @@ Function GetUSDistance() As Word
 End Function
 
 
+Function GetUSAverage() As Word
+
+   Dim lAverage As Long
+   Local Dim b As Byte
+
+   For b = 1 To cMeasPoints
+
+      lAverage = lAverage + wUSMeasPoints(b)
+   Next b
+
+   lAverage = lAverage / cMeasPoints
+
+End Function
+
+
 
 
 
@@ -180,6 +295,10 @@ Scheduler:
 
    End Select
 
+
+   If bUSWaitTime >= 2 Then
+      bUSWaitTime = bUSWaitTime - 2
+   End If
 Return
 
 
