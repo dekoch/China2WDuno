@@ -6,7 +6,7 @@ $framesize = 60
 
 '########################################
 '
-' https://sourceforge.net/p/china2wduno
+' https://github.com/dekoch/China2WDuno
 '
 '########################################
 '
@@ -42,11 +42,12 @@ Config Com1 = 57600 , Synchrone = 0 , Parity = None , Stopbits = 1 , Databits = 
 Config Servos = 1 , Servo1 = Portb.0 , Reload = 10
 
 'pseudo multitasking use TIMER2
-Config Timer2 = Timer, Prescale = 256
-Enable Timer2
-Const Timer2_Preload = 131 ' 2 ms
-Timer2 = Timer2_Preload
+Config Timer2 = Timer , Prescale = 256
 On Timer2 Scheduler
+Const Timer2_Preload = 131
+Load Timer2 = Timer2_Preload ' 2 ms sample
+Enable Timer2
+Start Timer2
 
 
 'Inputs
@@ -78,14 +79,13 @@ qUSTrig Alias PortC.0
 
 
 'Variables, Subs and Functions
-Declare Sub SelectNextTask()
 Declare Function GetUSDistance() As Word
 
 'pseudo multitasking
 Dim T As Byte
-Dim Flaga1 As Bit
-Dim Flaga2 As Bit
-Dim Flaga3 As Bit
+Dim Task1 As Bit
+Dim Task2 As Bit
+Dim Task3 As Bit
 
 
 Enable Interrupts
@@ -124,24 +124,24 @@ qLed = 0
 
 Do
    '-----------------------------
-   Task1:
+   If Task1 = 1 Then
 
 
-   Call SelectNextTask()
-
-
-   '-----------------------------
-   Task2:
-
-
-   Call SelectNextTask()
+   End If
 
 
    '-----------------------------
-   Task3:
+   If Task2 = 1 Then
 
 
-   Call SelectNextTask()
+   End If
+
+
+   '-----------------------------
+   If Task3 = 1 Then
+
+
+   End If
 
 Loop
 
@@ -158,9 +158,6 @@ End
 Function GetUSDistance() As Word
 
    Local wOutput As Word
-   Dim mValid As Bit
-
-   mValid = 1
 
 
    Pulseout PortC , 0 , 20 'min. 10us pulse
@@ -168,20 +165,7 @@ Function GetUSDistance() As Word
    Pulsein wOutput , PinC , 1 , 1 'read distance, timeout 655.35ms
 
 
-   'Pulsein timeout
-   If Err = 1 Then
-
-      mValid = 0
-   End If
-
-   'sensor timeout
-   If wOutput > 30 Then
-
-      mValid = 0
-   End If
-
-
-   If mValid = 1 Then
+   If Err = 0 Then
       wOutput = wOutput / 58 'centimeters
 
       GetUSDistance = wOutput
@@ -200,35 +184,24 @@ Scheduler:
 
    Incr T
 
-   Reset Flaga1
-   Reset Flaga2
-   Reset Flaga3
-
-   Select Case T
-
-      Case 2:
-         Flaga1 = 1'for example task 1 starts if t=2 and ended if t=4
-
-      Case 5:
-         Flaga2 = 1
-
-      Case 8
-         Flaga3 = 1
-         T = 0
-
-   End Select
-
-Return
-
-
-Sub SelectNextTask()
-
-   If Flaga1 = 1 Then
-      Goto Task1
-   Elseif Flaga2 = 1 Then
-      Goto Task2
-   Else
-      Goto Task3
+   If T >= 1 Then
+      Task1 = 1
+      Task2 = 0
+      Task3 = 0
    End If
 
-End Sub
+   If T >= 5 Then
+      Task1 = 0
+      Task2 = 1
+      Task3 = 0
+   End If
+
+   If T >= 9 Then
+      Task1 = 0
+      Task2 = 0
+      Task3 = 1
+
+      T = 0
+   End If
+
+Return

@@ -6,7 +6,7 @@ $framesize = 60
 
 '########################################
 '
-' https://sourceforge.net/p/china2wduno
+' https://github.com/dekoch/China2WDuno
 '
 '########################################
 '
@@ -43,11 +43,12 @@ Config Com1 = 57600 , Synchrone = 0 , Parity = None , Stopbits = 1 , Databits = 
 Config Servos = 1 , Servo1 = Portb.0 , Reload = 10
 
 'pseudo multitasking use TIMER2
-Config Timer2 = Timer, Prescale = 256
-Enable Timer2
-Const Timer2_Preload = 131 ' 2 ms
-Timer2 = Timer2_Preload
+Config Timer2 = Timer , Prescale = 256
 On Timer2 Scheduler
+Const Timer2_Preload = 131
+Load Timer2 = Timer2_Preload ' 2 ms sample
+Enable Timer2
+Start Timer2
 
 
 'Inputs
@@ -79,25 +80,27 @@ qUSTrig Alias PortC.0
 
 
 'Variables, Subs and Functions
-Declare Sub SelectNextTask()
 Declare Function GetUSDistance() As Word
 Declare Function GetUSAverage() As Word
 
 'pseudo multitasking
 Dim T As Byte
-Dim Flaga1 As Bit
-Dim Flaga2 As Bit
-Dim Flaga3 As Bit
+Dim Task1 As Bit
+Dim Task2 As Bit
+Dim Task3 As Bit
 
+Dim bTemp As Byte
 Dim sTemp As Single
 Dim sOffset As Single
+Dim bIndex As Byte
 
 Const cMeasPoints = 18
 Dim bCurrMeasPoint As Byte
 Dim wUSMeasPoints(cMeasPoints) As Word
 Dim bUSWaitTime As Byte
 Dim mSearchRight As Bit
-Dim bNewDirection As Byte
+Dim bFreeDirection As Byte
+Dim mLastDirection As Bit '0 = left / 1 = right
 
 
 Enable Interrupts
@@ -115,7 +118,7 @@ qLED = 0 '0 = LED off
 qUSTrig = 0
 
 bCurrMeasPoint = 1
-bNewDirection = 90 '0 = right / 90 = middle / 180 = left
+bFreeDirection = cMeasPoints / 2 '0 = right / 9 = middle / 18 = left
 
 Servo(1) = 0
 
@@ -142,137 +145,175 @@ Do
 
    '-----------------------------
    'movement control
-   Task1:
+   If Task1 = 1 Then
+
+      Dim wMinValue As Word
+
+      Min(wUSMeasPoints(1) , wMinValue , bIndex)
 
 
-   Call SelectNextTask()
+      If wMinValue < 10 Then
+
+         'stop motors
+
+
+         If mLastDirection = 0 Then
+            'turn left
+
+         Else
+            'turn tight
+
+         End If
+      Else
+
+         bTemp = cMeasPoints / 2
+         bTemp = bTemp + 2 'threshold
+
+         'turn left
+         If bFreeDirection > bTemp Then
+
+            mLastDirection = 0
+
+
+         End If
+
+
+         bTemp = cMeasPoints / 2
+         bTemp = bTemp - 2 'threshold
+
+         'turn right
+         If bFreeDirection < bTemp Then
+
+            mLastDirection = 1
+
+
+         End If
+      End If
+
+   End If
 
 
    '-----------------------------
    'communication
-   Task2:
+   If Task2 = 1 Then
 
 
-   Call SelectNextTask()
+   End If
 
 
    '-----------------------------
    'obstacle recognition
-   Task3:
-   'task needs 38ms if no obstacle found
+   If Task3 = 1 Then
+      'task needs 38ms if no obstacle found
 
-   If bUSWaitTime = 0 Then
+      If bUSWaitTime = 0 Then
 
-      'mesure distance and log value into array
-      wUSMeasPoints(bCurrMeasPoint) = GetUSDistance()
-
-
-      Dim mMeasComplete As Bit
-
-      'decide which direction for next measuring point
-      If mSearchRight = 0 Then
-
-         bCurrMeasPoint = bCurrMeasPoint + 1
-
-         If bCurrMeasPoint >= cMeasPoints Then
-
-            mSearchRight = 1
-            mMeasComplete = 1
-         End If
-      Else
-
-         bCurrMeasPoint = bCurrMeasPoint - 1
-
-         If bCurrMeasPoint <= 1 Then
-
-            mSearchRight = 0
-            mMeasComplete = 1
-         End If
-      End If
-
-      'if series of measurements is complete, set new direction
-      If mMeasComplete = 1 Then
-
-         Dim b As Byte
-
-         For b = 1 To cMeasPoints
-
-            Print "US Points: " ; wUSMeasPoints(b)
-         Next b
+         'mesure distance and log value into array
+         wUSMeasPoints(bCurrMeasPoint) = GetUSDistance()
 
 
-         Dim bIndex As Byte
-         Dim wMaxValue As Word
-         Dim wLeftValue As Word
-         Dim wRightValue As Word
-         Dim wAverage As Word
-         Dim mFreeDirection As Bit
+         Dim mMeasComplete As Bit
 
-         mFreeDirection = 1
+         'decide which direction for next measuring point
+         If mSearchRight = 0 Then
 
+            If bCurrMeasPoint >= cMeasPoints Then
 
-         wAverage = GetUSAverage()
+               mSearchRight = 1
+               mMeasComplete = 1
 
-         Print "US Average: " ; wAverage
+               bCurrMeasPoint = bCurrMeasPoint - 1
+            Else
 
+               bCurrMeasPoint = bCurrMeasPoint + 1
+            End If
+         Else
 
-         Max(wUSMeasPoints(1) , wMaxValue , bIndex)
+            If bCurrMeasPoint <= 1 Then
 
+               mSearchRight = 0
+               mMeasComplete = 1
 
-         If bIndex > 0 Then
-            wLeftValue = wUSMeasPoints(bIndex - 1)
+               bCurrMeasPoint = bCurrMeasPoint + 1
+            Else
 
-            If wLeftValue < wAverage Then
-
-               mFreeDirection = 0
+               bCurrMeasPoint = bCurrMeasPoint - 1
             End If
          End If
 
-         If bIndex < cMeasPoints Then
-            wRightValue = wUSMeasPoints(bIndex + 1)
+         'if series of measurements is complete, set new direction
+         If mMeasComplete = 1 Then
 
-            If wRightValue < wAverage Then
+            Dim b As Byte
 
-               mFreeDirection = 0
+            For b = 1 To cMeasPoints
+
+               Print "US Points: " ; wUSMeasPoints(b)
+            Next b
+
+
+            Dim wMaxValue As Word
+            Dim wValue As Word
+            Dim wAverage As Word
+            Dim mFreeDirection As Bit
+
+            mFreeDirection = 1
+
+
+            wAverage = GetUSAverage()
+
+            Print "US Average: " ; wAverage
+
+
+            Max(wUSMeasPoints(1) , wMaxValue , bIndex)
+
+
+            If bIndex > 1 Then
+               wValue = wUSMeasPoints(bIndex - 1)
+
+               If wValue < wAverage Then
+
+                  mFreeDirection = 0
+               End If
+            End If
+
+            If bIndex < cMeasPoints Then
+               wValue = wUSMeasPoints(bIndex + 1)
+
+               If wValue < wAverage Then
+
+                  mFreeDirection = 0
+               End If
+            End If
+
+            'if left and right measuring point (relative to max. value)
+            'is over average, then set new direction
+            If mFreeDirection = 1 Then
+
+               bFreeDirection = bIndex
+
+               Print "Free Direction: " ; bFreeDirection
             End If
          End If
 
-         'if left and right measuring point (relative to max. value)
-         'is over average, then set new direction 0..180 degree
-         If mFreeDirection = 1 Then
 
-            sTemp = cMeasPoints - 1
-            sTemp = 180 / sTemp
+         'set servo angle
+         'measuring points 1..18 = servo signal 0..100 = 0..180 degree
+         sTemp = cMeasPoints - 1
+         sTemp = 100 / sTemp
 
-            sOffset = sTemp
+         sOffset = sTemp
 
-            sTemp = sTemp * bIndex
-            sTemp = sTemp - sOffset
+         sTemp = sTemp * bCurrMeasPoint
+         sTemp = sTemp - sOffset
 
-            bNewDirection = sTemp
+         Servo(1) = sTemp
 
-            Print "New Direction: " ; bNewDirection
-         End If
+
+         bUSWaitTime = 10 'wait min. 10ms for servo
       End If
 
-
-      'set servo angle
-      'measuring points 1..18 = servo signal 0..100 = 0..180 degree
-      sTemp = cMeasPoints - 1
-      sTemp = 100 / sTemp
-
-      sOffset = sTemp
-
-      sTemp = sTemp * bCurrMeasPoint
-      sTemp = sTemp - sOffset
-
-      Servo(1) = sTemp
-
-
-      bUSWaitTime = 10 'wait min. 10ms for servo
    End If
-
-   Call SelectNextTask()
 
 
    Stop Watchdog
@@ -291,9 +332,6 @@ End
 Function GetUSDistance() As Word
 
    Local wOutput As Word
-   Dim mValid As Bit
-
-   mValid = 1
 
 
    Pulseout PortC , 0 , 20 'min. 10us pulse
@@ -301,20 +339,7 @@ Function GetUSDistance() As Word
    Pulsein wOutput , PinC , 1 , 1 'read distance, timeout 655.35ms
 
 
-   'Pulsein timeout
-   If Err = 1 Then
-
-      mValid = 0
-   End If
-
-   'sensor timeout
-   If wOutput > 30 Then
-
-      mValid = 0
-   End If
-
-
-   If mValid = 1 Then
+   If Err = 0 Then
       wOutput = wOutput / 58 'centimeters
 
       GetUSDistance = wOutput
@@ -349,39 +374,28 @@ Scheduler:
 
    Incr T
 
-   Reset Flaga1
-   Reset Flaga2
-   Reset Flaga3
+   If T >= 1 Then
+      Task1 = 1
+      Task2 = 0
+      Task3 = 0
+   End If
 
-   Select Case T
+   If T >= 5 Then
+      Task1 = 0
+      Task2 = 1
+      Task3 = 0
+   End If
 
-      Case 2:
-         Flaga1 = 1'for example task 1 starts if t=2 and ended if t=4
+   If T >= 9 Then
+      Task1 = 0
+      Task2 = 0
+      Task3 = 1
 
-      Case 5:
-         Flaga2 = 1
-
-      Case 8
-         Flaga3 = 1
-         T = 0
-
-   End Select
+      T = 0
+   End If
 
 
    If bUSWaitTime >= 2 Then
       bUSWaitTime = bUSWaitTime - 2
    End If
 Return
-
-
-Sub SelectNextTask()
-
-   If Flaga1 = 1 Then
-      Goto Task1
-   Elseif Flaga2 = 1 Then
-      Goto Task2
-   Else
-      Goto Task3
-   End If
-
-End Sub
