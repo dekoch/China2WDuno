@@ -1,12 +1,12 @@
 $regfile = "m328def.dat"
-$crystal = 16000000  '16MHz
+$crystal = 16000000                                         '16MHz
 $hwstack = 60
 $swstack = 60
 $framesize = 60
 
 '########################################
 '
-' https://sourceforge.net/p/china2wduno
+' https://github.com/dekoch/China2WDuno.git
 '
 '########################################
 '
@@ -42,47 +42,47 @@ Config Com1 = 57600 , Synchrone = 0 , Parity = None , Stopbits = 1 , Databits = 
 Config Servos = 1 , Servo1 = Portb.0 , Reload = 10
 
 'pseudo multitasking use TIMER2
-Config Timer2 = Timer, Prescale = 256
+Config Timer2 = Timer , Prescale = 256
 Enable Timer2
-Const Timer2_Preload = 131 ' 2 ms
-Timer2 = Timer2_Preload
+Const Timer2_preload = 131                                  ' 2 ms
+Timer2 = Timer2_preload
 On Timer2 Scheduler
 
 
 'Inputs
-Config PINC.1 = Input
-iUSEcho Alias PINC.1
+Config Pinc.1 = Input
+Iusecho Alias Pinc.1
 
 
 'Outputs
-Config PORTB.0 = Output 'US Servo
+Config Portb.0 = Output                                     'US Servo
 
-Config PORTB.1 = Output
-qMotorIn1 Alias Portb.1
+Config Portb.1 = Output
+Qmotorin1 Alias Portb.1
 
-Config PORTB.2 = Output
-qMotorIn2 Alias Portb.2
+Config Portb.2 = Output
+Qmotorin2 Alias Portb.2
 
-Config PORTB.3 = Output
-qMotorIn3 Alias Portb.3
+Config Portb.3 = Output
+Qmotorin3 Alias Portb.3
 
-Config PORTB.4 = Output
-qMotorIn4 Alias Portb.4
+Config Portb.4 = Output
+Qmotorin4 Alias Portb.4
 
-Config PORTB.5 = Output
-qLED Alias Portb.5
+Config Portb.5 = Output
+Qled Alias Portb.5
 
-Config PORTC.0 = Output
-qUSTrig Alias PortC.0
+Config Portc.0 = Output
+Qustrig Alias Portc.0
 
 
 'Input PullUp / PullDown
-iUSEcho = 0 '0 = PullDown
+Iusecho = 0                                                 '0 = PullDown
 
 
 'Variables, Subs and Functions
-Declare Sub SelectNextTask()
-Declare Function GetUSDistance(Byref error As Bit) As Word
+Declare Sub Selectnexttask()
+Declare Function Getusdistance(byref Error As Bit) As Word
 
 'pseudo multitasking
 Dim T As Byte
@@ -95,12 +95,12 @@ Enable Interrupts
 
 
 'Init Output State
-qMotorIn1 = 0
-qMotorIn2 = 0
-qMotorIn3 = 0
-qMotorIn4 = 0
-qLED = 0 '0 = LED off
-qUSTrig = 0
+Qmotorin1 = 0
+Qmotorin2 = 0
+Qmotorin3 = 0
+Qmotorin4 = 0
+Qled = 0                                                    '0 = LED off
+Qustrig = 0
 
 Servo(1) = 50
 
@@ -110,21 +110,21 @@ Do
    Task1:
 
 
-   Call SelectNextTask()
+   Call Selectnexttask()
 
 
    '-----------------------------
    Task2:
 
 
-   Call SelectNextTask()
+   Call Selectnexttask()
 
 
    '-----------------------------
    Task3:
 
 
-   Call SelectNextTask()
+   Call Selectnexttask()
 
 Loop
 
@@ -134,23 +134,23 @@ End
 
 
 
-Function GetUSDistance(Byref error As Bit) As Word
+Function Getusdistance(byref Error As Bit) As Word
 
-   Local wOutput As Word
+   Local Woutput As Word
 
-   Pulseout PortC , 0 , 20 'Min. 10us pulse
+   Pulseout Portc , 0 , 20                                  'Min. 10us pulse
 
-   Pulsein wOutput , PinC , 1 , 1 'read distance
+   Pulsein Woutput , Pinc , 1 , 1                           'read distance
 
    If Err = 0 Then
-      wOutput = wOutput * 10 'calcullate to
-      wOutput = wOutput / 58 ' centimeters
+      Woutput = Woutput * 10                                'calcullate to
+      Woutput = Woutput / 58                                ' centimeters
       'wOutput = wOutput / 6 ' milimeters
-      GetUSDistance = wOutput
+      Getusdistance = Woutput
    Else
       'Pulsein timed out
-      error = 1
-      GetUSDistance = 0
+      Error = 1
+      Getusdistance = 0
    End If
 End Function
 
@@ -159,7 +159,7 @@ End Function
 
 
 Scheduler:
-   Timer2 = Timer2_Preload
+   Timer2 = Timer2_preload
 
    Incr T
 
@@ -170,7 +170,7 @@ Scheduler:
    Select Case T
 
       Case 2:
-         Flaga1 = 1'for example task 1 starts if t=2 and ended if t=4
+         Flaga1 = 1                                         'for example task 1 starts if t=2 and ended if t=4
 
       Case 5:
          Flaga2 = 1
@@ -184,7 +184,7 @@ Scheduler:
 Return
 
 
-Sub SelectNextTask()
+Sub Selectnexttask()
 
    If Flaga1 = 1 Then
       Goto Task1
