@@ -158,10 +158,10 @@ Do
 
 
          If mLastDirection = 0 Then
-            'turn left
+            'turn right
 
          Else
-            'turn tight
+            'turn left
 
          End If
       Else
@@ -380,22 +380,26 @@ Scheduler:
       Task3 = 0
    End If
 
-   If T >= 5 Then
+   If T >= 4 Then
       Task1 = 0
       Task2 = 1
       Task3 = 0
    End If
 
-   If T >= 9 Then
+   If T >= 7 Then
       Task1 = 0
       Task2 = 0
       Task3 = 1
-
+   End If
+   
+   If T >= 9 Then
       T = 0
    End If
 
 
    If bUSWaitTime >= 2 Then
       bUSWaitTime = bUSWaitTime - 2
+   ElseIf bUSWaitTime = 1 Then
+      bUSWaitTime = 0
    End If
 Return
