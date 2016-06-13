@@ -1,4 +1,5 @@
-$regfile = "m328def.dat"
+
+$Regfile="m328pdef.dat"
 $crystal = 16000000                                         '16MHz
 $hwstack = 60
 $swstack = 60
