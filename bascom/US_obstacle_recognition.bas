@@ -34,6 +34,17 @@ $framesize = 60
 '                    A4 (18)        PC.4              SDA (I2C)            IIC
 '                    A5 (19)        PC.5              SCL (I2C)            IIC
 
+'Config and Settings
+Const cMeasPoints = 18
+Const cServoOffset = 50
+
+Const cBREAK = 0
+Const cFWD = 201
+Const cBWD = 202
+Const cFFWD = 211
+Const cFBWD = 212
+
+
 Config Watchdog = 2048
 
 Config Com1 = 57600 , Synchrone = 0 , Parity = None , Stopbits = 1 , Databits = 8 , Clockpol = 0
@@ -82,6 +93,7 @@ qUSTrig Alias PortC.0
 'Variables, Subs and Functions
 Declare Function GetUSDistance() As Word
 Declare Function GetUSAverage() As Word
+Declare Sub MotorControl()
 
 'pseudo multitasking
 Dim T As Byte
@@ -94,7 +106,6 @@ Dim sTemp As Single
 Dim sOffset As Single
 Dim bIndex As Byte
 
-Const cMeasPoints = 18
 Dim bCurrMeasPoint As Byte
 Dim wUSMeasPoints(cMeasPoints) As Word
 Dim bUSWaitTime As Byte
@@ -102,8 +113,10 @@ Dim mSearchRight As Bit
 Dim bFreeDirection As Byte
 Dim mLastDirection As Bit '0 = left / 1 = right
 
-
-Enable Interrupts
+Dim bSpeed As Byte
+Dim bLeftMotor As Byte
+Dim bRightMotor As Byte
+Dim bMotorWaitTime As Byte
 
 
 'Init State
@@ -120,7 +133,10 @@ qUSTrig = 0
 bCurrMeasPoint = 1
 bFreeDirection = cMeasPoints / 2 '0 = right / 9 = middle / 18 = left
 
-Servo(1) = 0
+Servo(1) = cServoOffset
+
+
+Enable Interrupts
 
 
 'hello sequence
@@ -154,17 +170,24 @@ Do
 
       If wMinValue < 10 Then
 
-         'stop motors
-
-
          If mLastDirection = 0 Then
+
             'turn right
-
+            bSpeed = 5
+            bLeftMotor = cFWD
+            bRightMotor = cBWD
          Else
-            'turn left
 
+            'turn left
+            bSpeed = 5
+            bLeftMotor = cBWD
+            bRightMotor = cFWD
          End If
       Else
+
+         bLeftMotor = cFFWD
+         bRightMotor = cFFWD
+
 
          bTemp = cMeasPoints / 2
          bTemp = bTemp + 2 'threshold
@@ -174,7 +197,9 @@ Do
 
             mLastDirection = 0
 
-
+            bSpeed = 5
+            bLeftMotor = cBREAK
+            bRightMotor = cFWD
          End If
 
 
@@ -186,24 +211,23 @@ Do
 
             mLastDirection = 1
 
-
+            bSpeed = 5
+            bLeftMotor = cFWD
+            bRightMotor = cBREAK
          End If
       End If
-
-   End If
 
 
    '-----------------------------
    'communication
-   If Task2 = 1 Then
+   ElseIf Task2 = 1 Then
 
 
-   End If
 
 
    '-----------------------------
    'obstacle recognition
-   If Task3 = 1 Then
+   ElseIf Task3 = 1 Then
       'task needs 38ms if no obstacle found
 
       If bUSWaitTime = 0 Then
@@ -307,7 +331,7 @@ Do
          sTemp = sTemp * bCurrMeasPoint
          sTemp = sTemp - sOffset
 
-         Servo(1) = sTemp
+         Servo(1) = sTemp + cServoOffset
 
 
          bUSWaitTime = 10 'wait min. 10ms for servo
@@ -366,11 +390,85 @@ Function GetUSAverage() As Word
 End Function
 
 
+Sub MotorControl()
+
+   Local bMotor As Byte
+   Dim mTempA As Bit
+   Dim mTempB As Bit
+   Local bT1 As Byte
+
+   For bT1 = 1 To 2
+
+      If bT1 = 1 Then
+
+         bMotor = bLeftMotor
+         mTempA = qMotorIn1
+         mTempB = qMotorIn2
+      ElseIf bT1 = 2 Then
+
+         bMotor = bRightMotor
+         mTempA = qMotorIn3
+         mTempB = qMotorIn4
+      End If
+
+
+      Select Case bMotor
+
+         Case cBREAK:
+            mTempA = 0
+            mTempB = 0
+
+
+         Case cFWD:
+            Toggle mTempA
+            mTempB = 0
+
+         Case cFFWD:
+            mTempA = 1
+            mTempB = 0
+
+            bSpeed = 20
+
+
+         Case cBWD:
+            mTempA = 0
+            Toggle mTempB
+
+         Case cFBWD:
+            mTempA = 0
+            mTempB = 1
+
+            bSpeed = 20
+
+      End Select
+
+
+      If bT1 = 1 Then
+
+         qMotorIn1 = mTempA
+         qMotorIn2 = mTempB
+      ElseIf bT1 = 2 Then
+
+         qMotorIn3 = mTempA
+         qMotorIn4 = mTempB
+      End If
+
+   Next bT1
+
+
+   If bSpeed > 20 Then
+
+      bSpeed = 20
+   End If
+   
+
+   bMotorWaitTime = 20 - bSpeed
+End Sub
+
 
 
 
 Scheduler:
-   Timer2 = Timer2_Preload
 
    Incr T
 
@@ -391,7 +489,7 @@ Scheduler:
       Task2 = 0
       Task3 = 1
    End If
-   
+
    If T >= 9 Then
       T = 0
    End If
@@ -402,4 +500,20 @@ Scheduler:
    ElseIf bUSWaitTime = 1 Then
       bUSWaitTime = 0
    End If
+
+
+   If bMotorWaitTime >= 2 Then
+      bMotorWaitTime = bMotorWaitTime - 2
+   ElseIf bMotorWaitTime = 1 Then
+      bMotorWaitTime = 0
+   End If
+
+
+   If bMotorWaitTime = 0 Then
+
+      Call MotorControl()
+   End If
+
+
+   Timer2 = Timer2_Preload
 Return
