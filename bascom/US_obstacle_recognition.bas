@@ -44,6 +44,8 @@ Const cBWD = 202
 Const cFFWD = 211
 Const cFBWD = 212
 
+Const cTimer2Sample = 2
+
 
 Config Watchdog = 2048
 
@@ -91,6 +93,8 @@ qUSTrig Alias PortC.0
 
 
 'Variables, Subs and Functions
+Declare Sub WaitByte(byref t As Byte)
+Declare Sub WaitWord(byref t As Word)
 Declare Function GetUSDistance() As Word
 Declare Function GetUSAverage() As Word
 Declare Sub MotorControl()
@@ -105,6 +109,8 @@ Dim bTemp As Byte
 Dim sTemp As Single
 Dim sOffset As Single
 Dim bIndex As Byte
+
+Dim bIsAliveWaitTime As Byte
 
 Dim bCurrMeasPoint As Byte
 Dim wUSMeasPoints(cMeasPoints) As Word
@@ -340,6 +346,17 @@ Do
    End If
 
 
+   If bIsAliveWaitTime = 0 Then
+
+      Toggle qLED
+
+      'if a task needs more than the reserved time (6ms),
+      'the led will begin to flicker.
+      'use this to improve your cycle time.
+      bIsAliveWaitTime = cTimer2Sample * 3
+   End If
+
+
    Stop Watchdog
 Loop
 
@@ -460,7 +477,7 @@ Sub MotorControl()
 
       bSpeed = 20
    End If
-   
+
 
    bMotorWaitTime = 20 - bSpeed
 End Sub
@@ -472,6 +489,7 @@ Scheduler:
 
    Incr T
 
+   'enable other task on every third cycle
    If T >= 1 Then
       Task1 = 1
       Task2 = 0
@@ -492,21 +510,15 @@ Scheduler:
 
    If T >= 9 Then
       T = 0
+      Delay
    End If
 
 
-   If bUSWaitTime >= 2 Then
-      bUSWaitTime = bUSWaitTime - 2
-   ElseIf bUSWaitTime = 1 Then
-      bUSWaitTime = 0
-   End If
+   Call WaitByte(bIsAliveWaitTime)
 
+   Call WaitByte(bUSWaitTime)
 
-   If bMotorWaitTime >= 2 Then
-      bMotorWaitTime = bMotorWaitTime - 2
-   ElseIf bMotorWaitTime = 1 Then
-      bMotorWaitTime = 0
-   End If
+   Call WaitByte(bMotorWaitTime)
 
 
    If bMotorWaitTime = 0 Then
@@ -517,3 +529,23 @@ Scheduler:
 
    Timer2 = Timer2_Preload
 Return
+
+
+Sub WaitByte(byref t As Byte)
+
+   If t >= cTimer2Sample Then
+      t = t - cTimer2Sample
+   ElseIf t = 1 Then
+      t = 0
+   End If
+End Sub
+
+
+Sub WaitWord(byref t As Word)
+
+   If t >= cTimer2Sample Then
+      t = t - cTimer2Sample
+   ElseIf t = 1 Then
+      t = 0
+   End If
+End Sub
