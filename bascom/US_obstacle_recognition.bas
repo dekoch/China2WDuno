@@ -3,6 +3,7 @@ $crystal = 16000000  '16MHz
 $hwstack = 60
 $swstack = 60
 $framesize = 60
+$baud = 38400
 
 '########################################
 '
@@ -49,7 +50,9 @@ Const cTimer2Sample = 2
 
 Config Watchdog = 2048
 
-Config Com1 = 57600 , Synchrone = 0 , Parity = None , Stopbits = 1 , Databits = 8 , Clockpol = 0
+Config Serialin = Buffered , Size = 10, Bytematch = 13
+
+Echo off
 
 'Config Servos use TIMER0
 'Servo1 = US direction
@@ -98,6 +101,7 @@ Declare Sub WaitWord(byref t As Word)
 Declare Function GetUSDistance() As Word
 Declare Function GetUSAverage() As Word
 Declare Sub MotorControl()
+Declare Sub MotorStop()
 
 'pseudo multitasking
 Dim T As Byte
@@ -109,6 +113,7 @@ Dim bTemp As Byte
 Dim sTemp As Single
 Dim sOffset As Single
 Dim bIndex As Byte
+Dim strRx10 As String * 10
 
 Dim bIsAliveWaitTime As Byte
 
@@ -179,15 +184,15 @@ Do
          If mLastDirection = 0 Then
 
             'turn right
-            bSpeed = 5
             bLeftMotor = cFWD
             bRightMotor = cBWD
+            bSpeed = 5
          Else
 
             'turn left
-            bSpeed = 5
             bLeftMotor = cBWD
             bRightMotor = cFWD
+            bSpeed = 5
          End If
       Else
 
@@ -203,9 +208,9 @@ Do
 
             mLastDirection = 0
 
-            bSpeed = 5
             bLeftMotor = cBREAK
             bRightMotor = cFWD
+            bSpeed = 5
          End If
 
 
@@ -217,9 +222,9 @@ Do
 
             mLastDirection = 1
 
-            bSpeed = 5
             bLeftMotor = cFWD
             bRightMotor = cBREAK
+            bSpeed = 5
          End If
       End If
 
@@ -228,7 +233,36 @@ Do
    'communication
    ElseIf Task2 = 1 Then
 
+      If strRx10 <> "" Then
 
+         Dim str10 As String * 10
+
+         str10 = strRx10
+
+         strRx10 = ""
+
+
+         Select Case str10
+
+            Case "hi"
+
+               Print "hello"
+
+
+            Case "reboot":
+
+               Print "stopping motors"
+
+               Call MotorStop()
+
+               'message for rebootUno.exe
+               Print "bye"
+               'reboot the controller into bootloader
+               Goto 0
+
+
+         End Select
+      End If
 
 
    '-----------------------------
@@ -483,6 +517,19 @@ Sub MotorControl()
 End Sub
 
 
+Sub MotorStop()
+
+   qMotorIn1 = mTempA
+   qMotorIn2 = mTempB
+
+   qMotorIn3 = mTempA
+   qMotorIn4 = mTempB
+
+   bLeftMotor = cBREAK
+   bRightMotor = cBREAK
+End Sub
+
+
 
 
 Scheduler:
@@ -549,3 +596,18 @@ Sub WaitWord(byref t As Word)
       t = 0
    End If
 End Sub
+
+
+
+Serial0charmatch:
+
+   Input strRx10
+
+   Clear Serialin
+
+   Delchars strRx10, 10
+   Delchars strRx10, 13
+
+   strRx10 = Trim(strRx10)
+
+Return
