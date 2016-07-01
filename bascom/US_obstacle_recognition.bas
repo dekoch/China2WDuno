@@ -1,4 +1,4 @@
-$regfile = "m328def.dat"
+$regfile = "m328pdef.dat"
 $crystal = 16000000  '16MHz
 $hwstack = 60
 $swstack = 60
@@ -96,6 +96,7 @@ qUSTrig Alias PortC.0
 
 
 'Variables, Subs and Functions
+Declare Sub Send(byval text As String)
 Declare Sub WaitByte(byref t As Byte)
 Declare Sub WaitWord(byref t As Word)
 Declare Function GetUSDistance() As Word
@@ -111,6 +112,7 @@ Dim Task3 As Bit
 
 Dim bTemp As Byte
 Dim sTemp As Single
+Dim strTemp25 As String * 25
 Dim sOffset As Single
 Dim bIndex As Byte
 Dim strRx10 As String * 10
@@ -246,17 +248,17 @@ Do
 
             Case "hi"
 
-               Print "hello"
+               Call Send("hello")
 
 
             Case "reboot":
 
-               Print "stopping motors"
+               Call Send("stopping motors")
 
                Call MotorStop()
 
                'message for rebootUno.exe
-               Print "bye"
+               Call Send("bye")
                'reboot the controller into bootloader
                Goto 0
 
@@ -277,6 +279,7 @@ Do
 
 
          Dim mMeasComplete As Bit
+         mMeasComplete = 0
 
          'decide which direction for next measuring point
          If mSearchRight = 0 Then
@@ -312,7 +315,8 @@ Do
 
             For b = 1 To cMeasPoints
 
-               Print "US Points: " ; wUSMeasPoints(b)
+               strTemp25 = "US Points: " + str(wUSMeasPoints(b))
+               Call Send(strTemp25)
             Next b
 
 
@@ -326,7 +330,8 @@ Do
 
             wAverage = GetUSAverage()
 
-            Print "US Average: " ; wAverage
+            'strTemp25 = "US Average: " + str(wAverage)
+            'Call Send(strTemp25)
 
 
             Max(wUSMeasPoints(1) , wMaxValue , bIndex)
@@ -356,7 +361,8 @@ Do
 
                bFreeDirection = bIndex
 
-               Print "Free Direction: " ; bFreeDirection
+               strTemp25 = "Free Direction: " + str(bFreeDirection)
+               Call Send(strTemp25)
             End If
          End If
 
@@ -409,26 +415,25 @@ Function GetUSDistance() As Word
    Local wOutput As Word
 
 
-   Pulseout PortC , 0 , 20 'min. 10us pulse
+   Do
 
-   Pulsein wOutput , PinC , 1 , 1 'read distance, timeout 655.35ms
+      Pulseout PortC , 0 , 20 'min. 10us pulse
+
+      Pulsein wOutput , PinC , 1 , 1 'read distance, timeout 655.35ms
+
+   Loop Until wOutput > 25
 
 
-   If Err = 0 Then
-      wOutput = wOutput / 58 'centimeters
-
-      GetUSDistance = wOutput
-   Else
-      'timed out
-      GetUSDistance = 0
-   End If
+   GetUSDistance = wOutput
 End Function
 
 
 Function GetUSAverage() As Word
 
-   Dim lAverage As Long
-   Local Dim b As Byte
+   Local lAverage As Long
+   Local b As Byte
+
+   lAverage = 0
 
    For b = 1 To cMeasPoints
 
@@ -597,6 +602,15 @@ Sub WaitWord(byref t As Word)
    End If
 End Sub
 
+
+Sub Send(text As String)
+
+   Disable Interrupts
+
+   Print text
+
+   Enable Interrupts
+End Sub
 
 
 Serial0charmatch:
