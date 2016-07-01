@@ -1,8 +1,9 @@
-$regfile = "m328def.dat"
+$regfile = "m328pdef.dat"
 $crystal = 16000000  '16MHz
 $hwstack = 60
 $swstack = 60
 $framesize = 60
+$baud = 38400
 
 '########################################
 '
@@ -48,7 +49,9 @@ Const cTimer2Sample = 2
 
 Config Watchdog = 2048
 
-Config Com1 = 57600 , Synchrone = 0 , Parity = None , Stopbits = 1 , Databits = 8 , Clockpol = 0
+Config Serialin = Buffered , Size = 10, Bytematch = 13
+
+Echo off
 
 'Config Servos use TIMER0
 'Servo1 = US direction
@@ -92,16 +95,23 @@ qUSTrig Alias PortC.0
 
 
 'Variables, Subs and Functions
+Declare Sub Send(byval text As String)
 Declare Sub WaitByte(byref t As Byte)
 Declare Sub WaitWord(byref t As Word)
 Declare Function GetUSDistance() As Word
 Declare Sub MotorControl()
+Declare Sub MotorStop()
 
 'pseudo multitasking
 Dim T As Byte
 Dim Task1 As Bit
 Dim Task2 As Bit
 Dim Task3 As Bit
+
+Dim bTemp As Byte
+Dim sTemp As Single
+Dim strTemp25 As String * 25
+Dim strRx10 As String * 10
 
 Dim bIsAliveWaitTime As Byte
 
@@ -195,19 +205,16 @@ Function GetUSDistance() As Word
    Local wOutput As Word
 
 
-   Pulseout PortC , 0 , 20 'min. 10us pulse
+   Do
 
-   Pulsein wOutput , PinC , 1 , 1 'read distance, timeout 655.35ms
+      Pulseout PortC , 0 , 20 'min. 10us pulse
+
+      Pulsein wOutput , PinC , 1 , 1 'read distance, timeout 655.35ms
+
+   Loop Until wOutput > 25
 
 
-   If Err = 0 Then
-      wOutput = wOutput / 58 'centimeters
-
-      GetUSDistance = wOutput
-   Else
-      'timed out
-      GetUSDistance = 0
-   End If
+   GetUSDistance = wOutput
 End Function
 
 
@@ -287,6 +294,19 @@ Sub MotorControl()
 End Sub
 
 
+Sub MotorStop()
+
+   qMotorIn1 = mTempA
+   qMotorIn2 = mTempB
+
+   qMotorIn3 = mTempA
+   qMotorIn4 = mTempB
+
+   bLeftMotor = cBREAK
+   bRightMotor = cBREAK
+End Sub
+
+
 
 
 Scheduler:
@@ -351,3 +371,27 @@ Sub WaitWord(byref t As Word)
       t = 0
    End If
 End Sub
+
+
+Sub Send(text As String)
+
+   Disable Interrupts
+
+   Print text
+
+   Enable Interrupts
+End Sub
+
+
+Serial0charmatch:
+
+   Input strRx10
+
+   Clear Serialin
+
+   Delchars strRx10, 10
+   Delchars strRx10, 13
+
+   strRx10 = Trim(strRx10)
+
+Return
