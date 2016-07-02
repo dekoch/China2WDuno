@@ -70,6 +70,9 @@ Start Timer2
 Config PINC.1 = Input
 iUSEcho Alias PINC.1
 
+Config PINC.2 = Input
+iServo1 Alias PINC.2
+
 
 'Outputs
 Config PORTB.0 = Output 'US Servo
@@ -119,6 +122,7 @@ Dim bSpeed As Byte
 Dim bLeftMotor As Byte
 Dim bRightMotor As Byte
 Dim bMotorWaitTime As Byte
+Dim wMotorDriveTime As Word
 
 
 'Init State
@@ -133,6 +137,9 @@ qLED = 0 '0 = LED off
 qUSTrig = 0
 
 Servo(1) = cServoOffset
+
+bLeftMotor = cBREAK
+bRightMotor = cBREAK
 
 
 Enable Interrupts
@@ -204,6 +211,10 @@ Function GetUSDistance() As Word
 
    Local wOutput As Word
 
+   wOutput = 0
+
+
+   Disable Interrupts
 
    Do
 
@@ -213,6 +224,11 @@ Function GetUSDistance() As Word
 
    Loop Until wOutput > 25
 
+   Enable Interrupts
+
+
+   'strTemp25 = "US: " + str(wOutput)
+   'Call Send(strTemp25)
 
    GetUSDistance = wOutput
 End Function
@@ -251,22 +267,28 @@ Sub MotorControl()
             Toggle mTempA
             mTempB = 0
 
+            If mTempA = 1 Then
+
+               bMotorWaitTime = bSpeed
+            End If
+
          Case cFFWD:
             mTempA = 1
             mTempB = 0
-
-            bSpeed = 20
 
 
          Case cBWD:
             mTempA = 0
             Toggle mTempB
 
+            If mTempB = 1 Then
+
+               bMotorWaitTime = bSpeed
+            End If
+
          Case cFBWD:
             mTempA = 0
             mTempB = 1
-
-            bSpeed = 20
 
       End Select
 
@@ -282,25 +304,16 @@ Sub MotorControl()
       End If
 
    Next bT1
-
-
-   If bSpeed > 20 Then
-
-      bSpeed = 20
-   End If
-
-
-   bMotorWaitTime = 20 - bSpeed
 End Sub
 
 
 Sub MotorStop()
 
-   qMotorIn1 = mTempA
-   qMotorIn2 = mTempB
+   qMotorIn1 = 0
+   qMotorIn2 = 0
 
-   qMotorIn3 = mTempA
-   qMotorIn4 = mTempB
+   qMotorIn3 = 0
+   qMotorIn4 = 0
 
    bLeftMotor = cBREAK
    bRightMotor = cBREAK
@@ -334,13 +347,14 @@ Scheduler:
 
    If T >= 9 Then
       T = 0
-      Delay
    End If
 
 
    Call WaitByte(bIsAliveWaitTime)
 
    Call WaitByte(bMotorWaitTime)
+
+   Call WaitWord(wMotorDriveTime)
 
 
    If bMotorWaitTime = 0 Then

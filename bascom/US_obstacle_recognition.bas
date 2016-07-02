@@ -36,7 +36,7 @@ $baud = 38400
 '                    A5 (19)        PC.5              SCL (I2C)            IIC
 
 'Config and Settings
-Const cMeasPoints = 18
+Const cMeasPoints = 6 '6 / 12 / 18
 Const cServoOffset = 50
 
 Const cBREAK = 0
@@ -71,6 +71,9 @@ Start Timer2
 Config PINC.1 = Input
 iUSEcho Alias PINC.1
 
+Config PINC.2 = Input
+iServo1 Alias PINC.2
+
 
 'Outputs
 Config PORTB.0 = Output 'US Servo
@@ -101,6 +104,7 @@ Declare Sub WaitByte(byref t As Byte)
 Declare Sub WaitWord(byref t As Word)
 Declare Function GetUSDistance() As Word
 Declare Function GetUSAverage(byval bOffset As Byte, byval bRange As Byte) As Word
+Declare Function GetUSMin(byval bOffset As Byte, byval bRange As Byte) As Word
 Declare Sub MotorControl()
 Declare Sub MotorStop()
 
@@ -121,15 +125,17 @@ Dim bIsAliveWaitTime As Byte
 
 Dim bCurrMeasPoint As Byte
 Dim wUSMeasPoints(cMeasPoints) As Word
-Dim bUSWaitTime As Byte
+Dim wUSWaitTime As Word
 Dim mSearchRight As Bit
 Dim bFreeDirection As Byte
 Dim mLastDirection As Bit '0 = left / 1 = right
+Dim wMinValue As Word
 
 Dim bSpeed As Byte
 Dim bLeftMotor As Byte
 Dim bRightMotor As Byte
 Dim bMotorWaitTime As Byte
+Dim wMotorDriveTime As Word
 
 
 'Init State
@@ -147,6 +153,9 @@ bCurrMeasPoint = 1
 bFreeDirection = cMeasPoints / 2 '0 = right / 9 = middle / 18 = left
 
 Servo(1) = cServoOffset
+
+bLeftMotor = cBREAK
+bRightMotor = cBREAK
 
 
 Enable Interrupts
@@ -176,34 +185,32 @@ Do
    'movement control
    If Task1 = 1 Then
 
-      Dim wMinValue As Word
-
       Min(wUSMeasPoints(1) , wMinValue , bIndex)
 
 
-      If wMinValue < 10 Then
+      If wMinValue < 150 Then
 
          If mLastDirection = 0 Then
 
             'turn right
             bLeftMotor = cFWD
             bRightMotor = cBWD
-            bSpeed = 5
+            bSpeed = 2
          Else
 
             'turn left
             bLeftMotor = cBWD
             bRightMotor = cFWD
-            bSpeed = 5
+            bSpeed = 2
          End If
       Else
 
-         bLeftMotor = cFFWD
-         bRightMotor = cFFWD
+         bLeftMotor = cFWD
+         bRightMotor = cFWD
+         bSpeed = 6
 
 
          bTemp = cMeasPoints / 2
-         bTemp = bTemp + 2 'threshold
 
          'turn left
          If bFreeDirection > bTemp Then
@@ -212,12 +219,11 @@ Do
 
             bLeftMotor = cBREAK
             bRightMotor = cFWD
-            bSpeed = 5
+            bSpeed = 4
          End If
 
 
          bTemp = cMeasPoints / 2
-         bTemp = bTemp - 2 'threshold
 
          'turn right
          If bFreeDirection < bTemp Then
@@ -226,8 +232,14 @@ Do
 
             bLeftMotor = cFWD
             bRightMotor = cBREAK
-            bSpeed = 5
+            bSpeed = 4
          End If
+      End If
+
+
+      If wMotorDriveTime = 0 Then
+
+         Call MotorStop()
       End If
 
 
@@ -272,7 +284,7 @@ Do
    ElseIf Task3 = 1 Then
       'task needs 38ms if no obstacle found
 
-      If bUSWaitTime = 0 Then
+      If wUSWaitTime = 0 And wMotorDriveTime = 0 Then
 
          'mesure distance and log value into array
          wUSMeasPoints(bCurrMeasPoint) = GetUSDistance()
@@ -288,8 +300,6 @@ Do
 
                mSearchRight = 1
                mMeasComplete = 1
-
-               bCurrMeasPoint = bCurrMeasPoint - 1
             Else
 
                bCurrMeasPoint = bCurrMeasPoint + 1
@@ -300,8 +310,6 @@ Do
 
                mSearchRight = 0
                mMeasComplete = 1
-
-               bCurrMeasPoint = bCurrMeasPoint + 1
             Else
 
                bCurrMeasPoint = bCurrMeasPoint - 1
@@ -319,16 +327,10 @@ Do
             '   Call Send(strTemp25)
             'Next b
 
-            'split series into 3 areas and calc the average for each
-            Dim wAverageR As Word
-            Dim wAverageM As Word
-            Dim wAverageL As Word
-            'Dim wAverage As Word
-
-            'wAverage = GetUSAverage(1, cMeasPoints)
-
-            'strTemp25 = "US Average: " + str(wAverage)
-            'Call Send(strTemp25)
+            'split series into 3 areas and get minimal value for each
+            Dim wMinR As Word
+            Dim wMinM As Word
+            Dim wMinL As Word
 
             Dim bRange As Byte
             Dim bOffset As Byte
@@ -338,31 +340,30 @@ Do
 
             bOffset = 1
 
-            wAverageR = GetUSAverage(bOffset, bRange)
+            wMinR = GetUSMin(bOffset, bRange)
 
 
             bOffset = bOffset + bRange
 
-            wAverageM = GetUSAverage(bOffset, bRange)
+            wMinM = GetUSMin(bOffset, bRange)
 
 
             bOffset = bOffset + bRange
 
-            wAverageL = GetUSAverage(bOffset, bRange)
+            wMinL = GetUSMin(bOffset, bRange)
 
 
             'prefer wAverageM
-            wAverageR = wAverageR - 100
-            wAverageL = wAverageL - 100
+            wMinM = wMinM + 100
 
 
-            'strTemp25 = "US AverageR: " + str(wAverageR)
+            'strTemp25 = "US MinR: " + str(wMinR)
             'Call Send(strTemp25)
 
-            'strTemp25 = "US AverageM: " + str(wAverageM)
+            'strTemp25 = "US MinM: " + str(wMinM)
             'Call Send(strTemp25)
 
-            'strTemp25 = "US AverageL: " + str(wAverageL)
+            'strTemp25 = "US MinL: " + str(wMinL)
             'Call Send(strTemp25)
 
 
@@ -374,12 +375,12 @@ Do
             mRight = 0
 
 
-            If wAverageR > wAverageM Then
+            If wMinR > wMinM Then
 
                mRight = 1
             End If
 
-            If wAverageL > wAverageM Then
+            If wMinL > wMinM Then
 
                mLeft = 1
             End If
@@ -387,7 +388,7 @@ Do
 
             If mRight = 1 Then
 
-               If wAverageR > wAverageL Then
+               If wMinR > wMinL Then
 
                   mLeft = 0
                End If
@@ -395,7 +396,7 @@ Do
 
             If mLeft = 1 Then
 
-               If wAverageL > wAverageR Then
+               If wMinL > wMinR Then
 
                   mRight = 0
                End If
@@ -406,7 +407,7 @@ Do
 
             If mRight = 1 Then
 
-               bFreeDirection = 0
+               bFreeDirection = 1
             End If
 
             If mLeft = 1 Then
@@ -417,13 +418,15 @@ Do
 
             'strTemp25 = "Free Direction: " + str(bFreeDirection)
             'Call Send(strTemp25)
+
+            wMotorDriveTime = 500
          End If
 
 
          'set servo angle
          'measuring points 1..18 = servo signal 0..100 = 0..180 degree
          sTemp = cMeasPoints - 1
-         sTemp = 100 / sTemp
+         sTemp = 140 / sTemp
 
          sOffset = sTemp
 
@@ -433,7 +436,7 @@ Do
          Servo(1) = sTemp + cServoOffset
 
 
-         bUSWaitTime = 10 'wait min. 10ms for servo
+         wUSWaitTime = 150 'wait min. 150ms for servo
       End If
 
    End If
@@ -467,6 +470,10 @@ Function GetUSDistance() As Word
 
    Local wOutput As Word
 
+   wOutput = 0
+
+
+   Disable Interrupts
 
    Do
 
@@ -476,6 +483,11 @@ Function GetUSDistance() As Word
 
    Loop Until wOutput > 25
 
+   Enable Interrupts
+
+
+   'strTemp25 = "US: " + str(wOutput)
+   'Call Send(strTemp25)
 
    GetUSDistance = wOutput
 End Function
@@ -499,6 +511,7 @@ Function GetUSAverage(byval bOffset As Byte, byval bRange As Byte) As Word
 
 
    bTo = bOffset + bRange
+   bTo = bTo - 1
 
    If bTo > cMeasPoints Then
 
@@ -516,6 +529,43 @@ Function GetUSAverage(byval bOffset As Byte, byval bRange As Byte) As Word
    lAverage = lAverage / bCnt
 
    GetUSAverage = lAverage
+End Function
+
+
+Function GetUSMin(byval bOffset As Byte, byval bRange As Byte) As Word
+
+   Local wOutput As Word
+   Local bTo As Byte
+   Local b As Byte
+
+   wOutput = 65535
+
+
+   If bOffset < 1 Then
+
+      bOffset = 1
+   End If
+
+
+   bTo = bOffset + bRange
+   bTo = bTo - 1
+
+   If bTo > cMeasPoints Then
+
+      bTo = cMeasPoints
+   End If
+
+
+   For b = bOffset To bTo
+
+      If wUSMeasPoints(b) < wOutput Then
+
+         wOutput = wUSMeasPoints(b)
+      End If
+   Next b
+
+
+   GetUSMin = wOutput
 End Function
 
 
@@ -552,22 +602,28 @@ Sub MotorControl()
             Toggle mTempA
             mTempB = 0
 
+            If mTempA = 1 Then
+
+               bMotorWaitTime = bSpeed
+            End If
+
          Case cFFWD:
             mTempA = 1
             mTempB = 0
-
-            bSpeed = 20
 
 
          Case cBWD:
             mTempA = 0
             Toggle mTempB
 
+            If mTempB = 1 Then
+
+               bMotorWaitTime = bSpeed
+            End If
+
          Case cFBWD:
             mTempA = 0
             mTempB = 1
-
-            bSpeed = 20
 
       End Select
 
@@ -583,25 +639,16 @@ Sub MotorControl()
       End If
 
    Next bT1
-
-
-   If bSpeed > 20 Then
-
-      bSpeed = 20
-   End If
-
-
-   bMotorWaitTime = 20 - bSpeed
 End Sub
 
 
 Sub MotorStop()
 
-   qMotorIn1 = mTempA
-   qMotorIn2 = mTempB
+   qMotorIn1 = 0
+   qMotorIn2 = 0
 
-   qMotorIn3 = mTempA
-   qMotorIn4 = mTempB
+   qMotorIn3 = 0
+   qMotorIn4 = 0
 
    bLeftMotor = cBREAK
    bRightMotor = cBREAK
@@ -635,15 +682,16 @@ Scheduler:
 
    If T >= 9 Then
       T = 0
-      Delay
    End If
 
 
    Call WaitByte(bIsAliveWaitTime)
 
-   Call WaitByte(bUSWaitTime)
+   Call WaitWord(wUSWaitTime)
 
    Call WaitByte(bMotorWaitTime)
+
+   Call WaitWord(wMotorDriveTime)
 
 
    If bMotorWaitTime = 0 Then
