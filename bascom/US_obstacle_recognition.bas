@@ -100,7 +100,7 @@ Declare Sub Send(byval text As String)
 Declare Sub WaitByte(byref t As Byte)
 Declare Sub WaitWord(byref t As Word)
 Declare Function GetUSDistance() As Word
-Declare Function GetUSAverage() As Word
+Declare Function GetUSAverage(byval bOffset As Byte, byval bRange As Byte) As Word
 Declare Sub MotorControl()
 Declare Sub MotorStop()
 
@@ -311,59 +311,112 @@ Do
          'if series of measurements is complete, set new direction
          If mMeasComplete = 1 Then
 
-            Dim b As Byte
+            'Dim b As Byte
 
-            For b = 1 To cMeasPoints
+            'For b = 1 To cMeasPoints
 
-               strTemp25 = "US Points: " + str(wUSMeasPoints(b))
-               Call Send(strTemp25)
-            Next b
+            '   strTemp25 = "US Points: " + str(wUSMeasPoints(b))
+            '   Call Send(strTemp25)
+            'Next b
 
+            'split series into 3 areas and calc the average for each
+            Dim wAverageR As Word
+            Dim wAverageM As Word
+            Dim wAverageL As Word
+            'Dim wAverage As Word
 
-            Dim wMaxValue As Word
-            Dim wValue As Word
-            Dim wAverage As Word
-            Dim mFreeDirection As Bit
-
-            mFreeDirection = 1
-
-
-            wAverage = GetUSAverage()
+            'wAverage = GetUSAverage(1, cMeasPoints)
 
             'strTemp25 = "US Average: " + str(wAverage)
             'Call Send(strTemp25)
 
+            Dim bRange As Byte
+            Dim bOffset As Byte
 
-            Max(wUSMeasPoints(1) , wMaxValue , bIndex)
+            bRange = cMeasPoints / 3
 
 
-            If bIndex > 1 Then
-               wValue = wUSMeasPoints(bIndex - 1)
+            bOffset = 1
 
-               If wValue < wAverage Then
+            wAverageR = GetUSAverage(bOffset, bRange)
 
-                  mFreeDirection = 0
+
+            bOffset = bOffset + bRange
+
+            wAverageM = GetUSAverage(bOffset, bRange)
+
+
+            bOffset = bOffset + bRange
+
+            wAverageL = GetUSAverage(bOffset, bRange)
+
+
+            'prefer wAverageM
+            wAverageR = wAverageR - 100
+            wAverageL = wAverageL - 100
+
+
+            'strTemp25 = "US AverageR: " + str(wAverageR)
+            'Call Send(strTemp25)
+
+            'strTemp25 = "US AverageM: " + str(wAverageM)
+            'Call Send(strTemp25)
+
+            'strTemp25 = "US AverageL: " + str(wAverageL)
+            'Call Send(strTemp25)
+
+
+            'compare all areas and set new direction
+            Dim mLeft As Bit
+            Dim mRight As Bit
+
+            mLeft = 0
+            mRight = 0
+
+
+            If wAverageR > wAverageM Then
+
+               mRight = 1
+            End If
+
+            If wAverageL > wAverageM Then
+
+               mLeft = 1
+            End If
+
+
+            If mRight = 1 Then
+
+               If wAverageR > wAverageL Then
+
+                  mLeft = 0
                End If
             End If
 
-            If bIndex < cMeasPoints Then
-               wValue = wUSMeasPoints(bIndex + 1)
+            If mLeft = 1 Then
 
-               If wValue < wAverage Then
+               If wAverageL > wAverageR Then
 
-                  mFreeDirection = 0
+                  mRight = 0
                End If
             End If
 
-            'if left and right measuring point (relative to max. value)
-            'is over average, then set new direction
-            If mFreeDirection = 1 Then
 
-               bFreeDirection = bIndex
+            bFreeDirection = cMeasPoints / 2
 
-               strTemp25 = "Free Direction: " + str(bFreeDirection)
-               Call Send(strTemp25)
+            If mRight = 1 Then
+
+               bFreeDirection = 0
             End If
+
+            If mLeft = 1 Then
+
+               bFreeDirection = cMeasPoints
+            End If
+
+
+            'strTemp25 = "Free Direction: " + str(bFreeDirection)
+            'Call Send(strTemp25)
          End If
 
 
@@ -428,19 +481,39 @@ Function GetUSDistance() As Word
 End Function
 
 
-Function GetUSAverage() As Word
+Function GetUSAverage(byval bOffset As Byte, byval bRange As Byte) As Word
 
    Local lAverage As Long
+   Local bCnt As Byte
+   Local bTo As Byte
    Local b As Byte
 
    lAverage = 0
+   bCnt = 0
 
-   For b = 1 To cMeasPoints
+
+   If bOffset < 1 Then
+
+      bOffset = 1
+   End If
+
+
+   bTo = bOffset + bRange
+
+   If bTo > cMeasPoints Then
+
+      bTo = cMeasPoints
+   End If
+
+
+   For b = bOffset To bTo
 
       lAverage = lAverage + wUSMeasPoints(b)
+
+      Incr bCnt
    Next b
 
-   lAverage = lAverage / cMeasPoints
+   lAverage = lAverage / bCnt
 
    GetUSAverage = lAverage
 End Function
