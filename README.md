@@ -6,6 +6,6 @@ This Project use a 2WD Chassis from aliexpress, including:
 * Sensor Shield V5.0
 * HC-SR04
 * L298N
-* SG90
+* Servo SG90
 
-![](https://raw.githubusercontent.com/dekoch/China2WDuno/master/img/2WD.jpg)
+![](https://github.com/dekoch/China2WDuno/blob/master/img/kit/kit.JPG)
