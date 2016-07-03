@@ -10,4 +10,4 @@ This Project use a 2WD Chassis from aliexpress, including:
 
 [Wiki](https://github.com/dekoch/China2WDuno/wiki)
 
-![](https://github.com/dekoch/China2WDuno/blob/master/img/kit/kit.JPG)
+![](https://github.com/dekoch/China2WDuno/blob/wiki/img/kit/kit.JPG)
