@@ -8,4 +8,6 @@ This Project use a 2WD Chassis from aliexpress, including:
 * L298N
 * Servo SG90
 
+[Wiki](https://github.com/dekoch/China2WDuno/wiki)
+
 ![](https://github.com/dekoch/China2WDuno/blob/master/img/kit/kit.JPG)
