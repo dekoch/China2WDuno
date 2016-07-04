@@ -38,6 +38,7 @@ $baud = 38400
 'Config and Settings
 Const cMeasPoints = 6 '6 / 12 / 18
 Const cServoOffset = 50
+Const cServoRange = 140
 
 Const cBREAK = 0
 Const cFWD = 201
@@ -65,6 +66,9 @@ Const Timer2_Preload = 131
 Load Timer2 = Timer2_Preload ' 2 ms sample
 Enable Timer2
 Start Timer2
+
+
+Config ADC = Single, PRESCALER = AUTO, REFERENCE = AVCC
 
 
 'Inputs
@@ -107,6 +111,7 @@ Declare Function GetUSAverage(byval bOffset As Byte, byval bRange As Byte) As Wo
 Declare Function GetUSMin(byval bOffset As Byte, byval bRange As Byte) As Word
 Declare Sub MotorControl()
 Declare Sub MotorStop()
+Declare Function GetServoPos() As Byte
 
 'pseudo multitasking
 Dim T As Byte
@@ -116,6 +121,7 @@ Dim Task3 As Bit
 
 Dim bTemp As Byte
 Dim sTemp As Single
+Dim wTemp As Word
 Dim strTemp25 As String * 25
 Dim sOffset As Single
 Dim bIndex As Byte
@@ -136,6 +142,9 @@ Dim bLeftMotor As Byte
 Dim bRightMotor As Byte
 Dim bMotorWaitTime As Byte
 Dim wMotorDriveTime As Word
+
+Dim wUServoOffset As Word
+Dim sUServoStep As Single
 
 
 'Init State
@@ -177,63 +186,94 @@ Wait 1
 qLed = 0
 
 
+'calibrate servo input
+wUServoOffset = Getadc(2)
+
+Servo(1) = cServoOffset + cServoRange
+
+Waitms 1000
+
+wTemp = Getadc(2)
+
+sUServoStep = wTemp
+
+sUServoStep = sUServoStep - wUServoOffset
+
+bTemp = cMeasPoints - 1
+sUServoStep = sUServoStep / bTemp
+
+
+Servo(1) = cServoOffset
+
+
+
 
 Do
    Start Watchdog
 
    '-----------------------------
    'movement control
-   If Task1 = 1 Then
+   'If Task1 = 1 Then
 
-      Min(wUSMeasPoints(1) , wMinValue , bIndex)
+      If bFreeDirection > 0 Then
+
+         Min(wUSMeasPoints(1) , wMinValue , bIndex)
 
 
-      If wMinValue < 150 Then
+         If wMinValue < 150 Then
 
-         If mLastDirection = 0 Then
+            If mLastDirection = 0 Then
 
-            'turn right
-            bLeftMotor = cFWD
-            bRightMotor = cBWD
-            bSpeed = 2
+               'turn right
+               bLeftMotor = cFWD
+               bRightMotor = cBWD
+               bSpeed = 2
+            Else
+
+               'turn left
+               bLeftMotor = cBWD
+               bRightMotor = cFWD
+               bSpeed = 2
+            End If
+
+            wMotorDriveTime = 300
          Else
 
-            'turn left
-            bLeftMotor = cBWD
-            bRightMotor = cFWD
-            bSpeed = 2
-         End If
-      Else
-
-         bLeftMotor = cFWD
-         bRightMotor = cFWD
-         bSpeed = 6
-
-
-         bTemp = cMeasPoints / 2
-
-         'turn left
-         If bFreeDirection > bTemp Then
-
-            mLastDirection = 0
-
-            bLeftMotor = cBREAK
-            bRightMotor = cFWD
-            bSpeed = 4
-         End If
-
-
-         bTemp = cMeasPoints / 2
-
-         'turn right
-         If bFreeDirection < bTemp Then
-
-            mLastDirection = 1
-
             bLeftMotor = cFWD
-            bRightMotor = cBREAK
-            bSpeed = 4
+            bRightMotor = cFWD
+            bSpeed = 1
+
+            wMotorDriveTime = 800
+
+            bTemp = cMeasPoints / 2
+
+            'turn left
+            If bFreeDirection > bTemp Then
+
+               mLastDirection = 0
+
+               bLeftMotor = cBREAK
+               bRightMotor = cFWD
+               bSpeed = 1
+               wMotorDriveTime = 400
+            End If
+
+
+            bTemp = cMeasPoints / 2
+
+            'turn right
+            If bFreeDirection < bTemp Then
+
+               mLastDirection = 1
+
+               bLeftMotor = cFWD
+               bRightMotor = cBREAK
+               bSpeed = 1
+               wMotorDriveTime = 400
+            End If
          End If
+
+         bFreeDirection = 0
       End If
 
 
@@ -243,9 +283,10 @@ Do
       End If
 
 
+
    '-----------------------------
    'communication
-   ElseIf Task2 = 1 Then
+   'ElseIf Task2 = 1 Then
 
       If strRx10 <> "" Then
 
@@ -281,173 +322,178 @@ Do
 
    '-----------------------------
    'obstacle recognition
-   ElseIf Task3 = 1 Then
+   'ElseIf Task3 = 1 Then
       'task needs 38ms if no obstacle found
 
-      If wUSWaitTime = 0 And wMotorDriveTime = 0 Then
+      If wUSWaitTime = 0 Then
 
-         'mesure distance and log value into array
-         wUSMeasPoints(bCurrMeasPoint) = GetUSDistance()
+         bTemp = GetServoPos()
+
+         If bTemp > 0 Then
+
+            bCurrMeasPoint = bTemp
 
 
-         Dim mMeasComplete As Bit
-         mMeasComplete = 0
+            'mesure distance and log value into array
+            wUSMeasPoints(bCurrMeasPoint) = GetUSDistance()
 
-         'decide which direction for next measuring point
-         If mSearchRight = 0 Then
 
-            If bCurrMeasPoint >= cMeasPoints Then
+            Dim mMeasComplete As Bit
+            mMeasComplete = 0
 
-               mSearchRight = 1
-               mMeasComplete = 1
+            'decide which direction for next measuring point
+            If mSearchRight = 0 Then
+
+               If bCurrMeasPoint >= cMeasPoints Then
+
+                  mSearchRight = 1
+                  mMeasComplete = 1
+               Else
+
+                  bCurrMeasPoint = bCurrMeasPoint + 1
+               End If
             Else
 
-               bCurrMeasPoint = bCurrMeasPoint + 1
-            End If
-         Else
+               If bCurrMeasPoint <= 1 Then
 
-            If bCurrMeasPoint <= 1 Then
+                  mSearchRight = 0
+                  mMeasComplete = 1
+               Else
 
-               mSearchRight = 0
-               mMeasComplete = 1
-            Else
-
-               bCurrMeasPoint = bCurrMeasPoint - 1
-            End If
-         End If
-
-         'if series of measurements is complete, set new direction
-         If mMeasComplete = 1 Then
-
-            'Dim b As Byte
-
-            'For b = 1 To cMeasPoints
-
-            '   strTemp25 = "US Points: " + str(wUSMeasPoints(b))
-            '   Call Send(strTemp25)
-            'Next b
-
-            'split series into 3 areas and get minimal value for each
-            Dim wMinR As Word
-            Dim wMinM As Word
-            Dim wMinL As Word
-
-            Dim bRange As Byte
-            Dim bOffset As Byte
-
-            bRange = cMeasPoints / 3
-
-
-            bOffset = 1
-
-            wMinR = GetUSMin(bOffset, bRange)
-
-
-            bOffset = bOffset + bRange
-
-            wMinM = GetUSMin(bOffset, bRange)
-
-
-            bOffset = bOffset + bRange
-
-            wMinL = GetUSMin(bOffset, bRange)
-
-
-            'prefer wMinM
-            If wMinL < 1200 Then
-
-               wMinL = 0
-            End If
-
-            If wMinR < 1200 Then
-
-               wMinR = 0
-            End If
-
-
-            'strTemp25 = "US MinR: " + str(wMinR)
-            'Call Send(strTemp25)
-
-            'strTemp25 = "US MinM: " + str(wMinM)
-            'Call Send(strTemp25)
-
-            'strTemp25 = "US MinL: " + str(wMinL)
-            'Call Send(strTemp25)
-
-
-            'compare all areas and set new direction
-            Dim mLeft As Bit
-            Dim mRight As Bit
-
-            mLeft = 0
-            mRight = 0
-
-
-            If wMinR > wMinM Then
-
-               mRight = 1
-            End If
-
-            If wMinL > wMinM Then
-
-               mLeft = 1
-            End If
-
-
-            If mRight = 1 Then
-
-               If wMinR > wMinL Then
-
-                  mLeft = 0
+                  bCurrMeasPoint = bCurrMeasPoint - 1
                End If
             End If
 
-            If mLeft = 1 Then
+            'if series of measurements is complete, set new direction
+            If mMeasComplete = 1 Then
 
-               If wMinL > wMinR Then
+               'Dim b As Byte
 
-                  mRight = 0
+               'For b = 1 To cMeasPoints
+
+               '   strTemp25 = "US Points: " + str(wUSMeasPoints(b))
+               '   Call Send(strTemp25)
+               'Next b
+
+               'split series into 3 areas and get minimal value for each
+               Dim wMinR As Word
+               Dim wMinM As Word
+               Dim wMinL As Word
+
+               Dim bRange As Byte
+               Dim bOffset As Byte
+
+               bRange = cMeasPoints / 3
+
+
+               bOffset = 1
+
+               wMinR = GetUSMin(bOffset, bRange)
+
+
+               bOffset = bOffset + bRange
+
+               wMinM = GetUSMin(bOffset, bRange)
+
+
+               bOffset = bOffset + bRange
+
+               wMinL = GetUSMin(bOffset, bRange)
+
+
+               'prefer wMinM
+               If wMinL < 1200 Then
+
+                  wMinL = 0
                End If
+
+               If wMinR < 1200 Then
+
+                  wMinR = 0
+               End If
+
+
+               'strTemp25 = "US MinR: " + str(wMinR)
+               'Call Send(strTemp25)
+
+               'strTemp25 = "US MinM: " + str(wMinM)
+               'Call Send(strTemp25)
+
+               'strTemp25 = "US MinL: " + str(wMinL)
+               'Call Send(strTemp25)
+
+
+               'compare all areas and set new direction
+               Dim mLeft As Bit
+               Dim mRight As Bit
+
+               mLeft = 0
+               mRight = 0
+
+
+               If wMinR > wMinM Then
+
+                  mRight = 1
+               End If
+
+               If wMinL > wMinM Then
+
+                  mLeft = 1
+               End If
+
+
+               If mRight = 1 Then
+
+                  If wMinR > wMinL Then
+
+                     mLeft = 0
+                  End If
+               End If
+
+               If mLeft = 1 Then
+
+                  If wMinL > wMinR Then
+
+                     mRight = 0
+                  End If
+               End If
+
+
+               bFreeDirection = cMeasPoints / 2
+
+               If mRight = 1 Then
+
+                  bFreeDirection = 1
+               End If
+
+               If mLeft = 1 Then
+
+                  bFreeDirection = cMeasPoints
+               End If
+
+
+               'strTemp25 = "Free Direction: " + str(bFreeDirection)
+               'Call Send(strTemp25)
             End If
 
 
-            bFreeDirection = cMeasPoints / 2
+            'set servo angle
+            'measuring points 1..18 = servo signal 0..100 = 0..180 degree
+            sTemp = cMeasPoints - 1
+            sTemp = cServoRange / sTemp
 
-            If mRight = 1 Then
+            sOffset = sTemp
 
-               bFreeDirection = 1
-            End If
+            sTemp = sTemp * bCurrMeasPoint
+            sTemp = sTemp - sOffset
 
-            If mLeft = 1 Then
-
-               bFreeDirection = cMeasPoints
-            End If
+            Servo(1) = sTemp + cServoOffset
 
 
-            'strTemp25 = "Free Direction: " + str(bFreeDirection)
-            'Call Send(strTemp25)
-
-            wMotorDriveTime = 500
+            wUSWaitTime = 50 'wait min. 50ms for servo
          End If
-
-
-         'set servo angle
-         'measuring points 1..18 = servo signal 0..100 = 0..180 degree
-         sTemp = cMeasPoints - 1
-         sTemp = 140 / sTemp
-
-         sOffset = sTemp
-
-         sTemp = sTemp * bCurrMeasPoint
-         sTemp = sTemp - sOffset
-
-         Servo(1) = sTemp + cServoOffset
-
-
-         wUSWaitTime = 150 'wait min. 150ms for servo
       End If
-
-   End If
+   'End If
 
 
    If bIsAliveWaitTime = 0 Then
@@ -481,7 +527,7 @@ Function GetUSDistance() As Word
    wOutput = 0
 
 
-   Disable Interrupts
+   'Disable Interrupts
 
    Do
 
@@ -491,7 +537,7 @@ Function GetUSDistance() As Word
 
    Loop Until wOutput > 25
 
-   Enable Interrupts
+   'Enable Interrupts
 
 
    'strTemp25 = "US: " + str(wOutput)
@@ -661,6 +707,47 @@ Sub MotorStop()
    bLeftMotor = cBREAK
    bRightMotor = cBREAK
 End Sub
+
+
+Function GetServoPos() As Byte
+
+   Local bOutput As Byte
+   Local wCurrPos As Word
+   Local sCheckPos As Single
+   Local wTemp As Word
+   Local b As Byte
+
+   bOutput = 0
+   sCheckPos = wUServoOffset
+
+
+   wCurrPos = Getadc(2)
+
+
+   For b = 1 To cMeasPoints
+
+      wTemp = sCheckPos - 10
+
+      If wCurrPos > wTemp Then
+
+         wTemp = sCheckPos + 10
+
+         If wCurrPos < wTemp Then
+
+            bOutput = b
+         End If
+      End If
+
+      sCheckPos = sCheckPos + sUServoStep
+   Next b
+
+
+   'strTemp25 = "CurrPos: " + str(wCurrPos)
+   'Call Send(strTemp25)
+
+
+   GetServoPos = bOutput
+End Function
 
 
 

@@ -28,12 +28,12 @@ $baud = 38400
 '                    13             PB.5              SCK (ICSP) and LED   SD / LED / LCD-Parallel
 '                    SDA            PC.4              SDA (I2C)            IIC
 '                    SCL            PC.5              SCL (I2C)            IIC
-'Analog-In (Digital) A0 (14)        PC.0                                   URF01 (HC-SR04 Trig)
-'                    A1 (15)        PC.1                                   URF01 (HC-SR04 Echo)
-'                    A2 (16)        PC.2
-'                    A3 (17)        PC.3
-'                    A4 (18)        PC.4              SDA (I2C)            IIC
-'                    A5 (19)        PC.5              SCL (I2C)            IIC
+'Analog-In (Digital) A0 (14)        PC.0              ADC0                 URF01 (HC-SR04 Trig)
+'                    A1 (15)        PC.1              ADC1                 URF01 (HC-SR04 Echo)
+'                    A2 (16)        PC.2              ADC2
+'                    A3 (17)        PC.3              ADC3
+'                    A4 (18)        PC.4              ADC4 / SDA (I2C)     IIC
+'                    A5 (19)        PC.5              ADC5 / SCL (I2C)     IIC
 
 'Config and Settings
 Const cServoOffset = 50
