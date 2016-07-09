@@ -135,6 +135,7 @@ Dim wUSWaitTime As Word
 Dim mSearchRight As Bit
 Dim bFreeDirection As Byte
 Dim mLastDirection As Bit '0 = left / 1 = right
+Dim bNextCompleteMeasPoint As Byte
 Dim wMinValue As Word
 
 Dim bSpeed As Byte
@@ -255,7 +256,7 @@ Do
                bLeftMotor = cBREAK
                bRightMotor = cFWD
                bSpeed = 1
-               wMotorDriveTime = 400
+               wMotorDriveTime = 300
             End If
 
 
@@ -269,17 +270,11 @@ Do
                bLeftMotor = cFWD
                bRightMotor = cBREAK
                bSpeed = 1
-               wMotorDriveTime = 400
+               wMotorDriveTime = 300
             End If
          End If
 
          bFreeDirection = 0
-      End If
-
-
-      If wMotorDriveTime = 0 Then
-
-         Call MotorStop()
       End If
 
 
@@ -347,7 +342,12 @@ Do
                If bCurrMeasPoint >= cMeasPoints Then
 
                   mSearchRight = 1
-                  mMeasComplete = 1
+
+                  If bCurrMeasPoint >= bNextCompleteMeasPoint Then
+
+                     mMeasComplete = 1
+                     bNextCompleteMeasPoint = 1
+                  End If
                Else
 
                   bCurrMeasPoint = bCurrMeasPoint + 1
@@ -357,7 +357,12 @@ Do
                If bCurrMeasPoint <= 1 Then
 
                   mSearchRight = 0
-                  mMeasComplete = 1
+
+                  If bCurrMeasPoint <= bNextCompleteMeasPoint Then
+
+                     mMeasComplete = 1
+                     bNextCompleteMeasPoint = cMeasPoints
+                  End If
                Else
 
                   bCurrMeasPoint = bCurrMeasPoint - 1
@@ -405,11 +410,17 @@ Do
                If wMinL < 1200 Then
 
                   wMinL = 0
+               Else
+
+                  wMinL = wMinL - 1200
                End If
 
                If wMinR < 1200 Then
 
                   wMinR = 0
+               Else
+
+                  wMinR = wMinR - 1200
                End If
 
 
@@ -478,7 +489,7 @@ Do
 
 
             'set servo angle
-            'measuring points 1..18 = servo signal 0..100 = 0..180 degree
+            'measuring points 1..cMeasPoints = servo signal cServoOffset..cServoOffset + cServoRange = 0..180 degree
             sTemp = cMeasPoints - 1
             sTemp = cServoRange / sTemp
 
@@ -792,6 +803,12 @@ Scheduler:
    If bMotorWaitTime = 0 Then
 
       Call MotorControl()
+   End If
+
+
+   If wMotorDriveTime = 0 Then
+
+      Call MotorStop()
    End If
 
 
