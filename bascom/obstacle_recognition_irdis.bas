@@ -36,7 +36,9 @@ $baud = 38400
 '                    A5 (19)        PC.5              ADC5 / SCL (I2C)     IIC
 
 'Config and Settings
+Const cMeasPoints = 6 '6 / 12 / 18
 Const cServoOffset = 50
+Const cServoRange = 140
 
 Const cBREAK = 0
 Const cFWD = 201
@@ -53,10 +55,6 @@ Config Serialin = Buffered , Size = 10, Bytematch = 13
 
 Echo off
 
-'Config Servos use TIMER0
-'Servo1 = US direction
-Config Servos = 1 , Servo1 = Portb.0 , Reload = 10
-
 'pseudo multitasking use TIMER2
 Config Timer2 = Timer , Prescale = 256
 On Timer2 Scheduler
@@ -66,12 +64,24 @@ Enable Timer2
 Start Timer2
 
 
+Config ADC = Single, PRESCALER = AUTO, REFERENCE = AVCC
+
+
 'Inputs
 Config PINC.1 = Input
 iUSEcho Alias PINC.1
 
 Config PINC.2 = Input
 iServo1 Alias PINC.2
+
+Config PINC.3 = Input
+iIRDisR Alias PINC.3
+
+Config PINC.4 = Input
+iIRDisM Alias PINC.4
+
+Config PINC.5 = Input
+iIRDisL Alias PINC.5
 
 
 'Outputs
@@ -101,9 +111,9 @@ qUSTrig Alias PortC.0
 Declare Sub Send(byval text As String)
 Declare Sub WaitByte(byref t As Byte)
 Declare Sub WaitWord(byref t As Word)
-Declare Function GetUSDistance() As Word
 Declare Sub MotorControl()
 Declare Sub MotorStop()
+Declare Sub CompareDirections(byval iL As Integer, byval iM As Integer, byval iR As Integer)
 
 'pseudo multitasking
 Dim T As Byte
@@ -113,16 +123,32 @@ Dim Task3 As Bit
 
 Dim bTemp As Byte
 Dim sTemp As Single
+Dim wTemp As Word
 Dim strTemp25 As String * 25
+Dim sOffset As Single
+Dim bIndex As Byte
 Dim strRx10 As String * 10
 
 Dim bIsAliveWaitTime As Byte
+
+Dim bFreeDirection As Byte
+Dim mLastDirection As Bit '0 = left / 1 = right
+Dim bNextCompleteMeasPoint As Byte
+Dim mLeft As Bit
+Dim mRight As Bit
 
 Dim bSpeed As Byte
 Dim bLeftMotor As Byte
 Dim bRightMotor As Byte
 Dim bMotorWaitTime As Byte
 Dim wMotorDriveTime As Word
+
+Dim iUIRDisR As Integer
+Dim iUIRDisM As Integer
+Dim iUIRDisL As Integer
+Dim wUIRDisOffsetR As Word
+Dim wUIRDisOffsetM As Word
+Dim wUIRDisOffsetL As Word
 
 
 'Init State
@@ -136,7 +162,7 @@ qMotorIn4 = 0
 qLED = 0 '0 = LED off
 qUSTrig = 0
 
-Servo(1) = cServoOffset
+bFreeDirection = cMeasPoints / 2 '0 = right / 9 = middle / 18 = left
 
 bLeftMotor = cBREAK
 bRightMotor = cBREAK
@@ -161,26 +187,164 @@ Wait 1
 qLed = 0
 
 
+'calibrate IR distance sensors
+wUIRDisOffsetR = Getadc(3)
+wUIRDisOffsetM = Getadc(4)
+wUIRDisOffsetL = Getadc(5)
+
+
 
 Do
    Start Watchdog
 
    '-----------------------------
-   If Task1 = 1 Then
+   'movement control
+   'If Task1 = 1 Then
+
+      If bFreeDirection > 0 Then
+
+         If iUIRDisL < -150 OR iUIRDisM < -150 OR iUIRDisR < -150 Then
+
+            If mLastDirection = 0 Then
+
+               'turn right
+               bLeftMotor = cFWD
+               bRightMotor = cBWD
+               bSpeed = 2
+            Else
+
+               'turn left
+               bLeftMotor = cBWD
+               bRightMotor = cFWD
+               bSpeed = 2
+            End If
+
+            wMotorDriveTime = 300
+         Else
+
+            bLeftMotor = cFWD
+            bRightMotor = cFWD
+            bSpeed = 1
+
+            wMotorDriveTime = 800
+
+            bTemp = cMeasPoints / 2
+
+            'turn left
+            If bFreeDirection > bTemp Then
+
+               mLastDirection = 0
+
+               bLeftMotor = cBREAK
+               bRightMotor = cFWD
+               bSpeed = 1
+               wMotorDriveTime = 300
+            End If
+
+
+            bTemp = cMeasPoints / 2
+
+            'turn right
+            If bFreeDirection < bTemp Then
+
+               mLastDirection = 1
+
+               bLeftMotor = cFWD
+               bRightMotor = cBREAK
+               bSpeed = 1
+               wMotorDriveTime = 300
+            End If
+         End If
+
+         bFreeDirection = 0
+      End If
 
 
 
    '-----------------------------
-   ElseIf Task2 = 1 Then
+   'communication
+   'ElseIf Task2 = 1 Then
 
+      If strRx10 <> "" Then
+
+         Dim str10 As String * 10
+
+         str10 = strRx10
+
+         strRx10 = ""
+
+
+         Select Case str10
+
+            Case "hi"
+
+               Call Send("hello")
+
+
+            Case "reboot":
+
+               Call Send("stopping motors")
+
+               Call MotorStop()
+
+               'message for rebootUno.exe
+               Call Send("bye")
+               'reboot the controller into bootloader
+               Goto 0
+
+
+         End Select
+      End If
 
 
    '-----------------------------
-   ElseIf Task3 = 1 Then
+   'obstacle recognition
+   'ElseIf Task3 = 1 Then
+
+      iUIRDisR = Getadc(3)
+      iUIRDisM = Getadc(4)
+      iUIRDisL = Getadc(5)
+
+      iUIRDisR = iUIRDisR - wUIRDisOffsetR
+      iUIRDisM = iUIRDisM - wUIRDisOffsetM
+      iUIRDisL = iUIRDisL - wUIRDisOffsetL
+
+      'invert signal
+      iUIRDisR = 65535 - iUIRDisR
+      iUIRDisM = 65535 - iUIRDisM
+      iUIRDisL = 65535 - iUIRDisL
+
+      'prefer iUIRDisM
+      iUIRDisL = iUIRDisL - 10
+      iUIRDisR = iUIRDisR - 10
 
 
+      'strTemp25 = "IR R: " + str(iUIRDisR)
+      'Call Send(strTemp25)
 
-   End If
+      'strTemp25 = "IR M: " + str(iUIRDisM)
+      'Call Send(strTemp25)
+
+      'strTemp25 = "IR L: " + str(iUIRDisL)
+      'Call Send(strTemp25)
+
+
+      'compare all areas and set new direction
+      Call CompareDirections(iUIRDisL, iUIRDisM, iUIRDisR)
+
+
+      bFreeDirection = cMeasPoints / 2
+
+      If mRight = 1 Then
+
+         bFreeDirection = 1
+      End If
+
+      If mLeft = 1 Then
+
+         bFreeDirection = cMeasPoints
+      End If
+   'End If
 
 
    If bIsAliveWaitTime = 0 Then
@@ -200,38 +364,6 @@ Loop
 
 End
 
-
-
-'HC-SR04
-'ultrasonic sensor
-'Trigger 10us
-'Echo 150us..25ms (38ms if no obstacle found)
-'Ranging Distance 2..400 cm
-Function GetUSDistance() As Word
-
-   Local wOutput As Word
-
-   wOutput = 0
-
-
-   Disable Interrupts
-
-   Do
-
-      Pulseout PortC , 0 , 20 'min. 10us pulse
-
-      Pulsein wOutput , PinC , 1 , 1 'read distance, timeout 655.35ms
-
-   Loop Until wOutput > 25
-
-   Enable Interrupts
-
-
-   'strTemp25 = "US: " + str(wOutput)
-   'Call Send(strTemp25)
-
-   GetUSDistance = wOutput
-End Function
 
 
 Sub MotorControl()
@@ -320,6 +452,40 @@ Sub MotorStop()
 End Sub
 
 
+Sub CompareDirections(byval iL As Integer, byval iM As Integer, byval iR As Integer)
+
+   mLeft = 0
+   mRight = 0
+
+
+   If iR > iM Then
+
+      mRight = 1
+   End If
+
+   If iL > iM Then
+
+      mLeft = 1
+   End If
+
+
+   If mRight = 1 Then
+
+      If iR > iL Then
+
+         mLeft = 0
+      End If
+   End If
+
+   If mLeft = 1 Then
+
+      If iL > iR Then
+
+         mRight = 0
+      End If
+   End If
+End Sub
+
 
 
 Scheduler:
@@ -360,6 +526,12 @@ Scheduler:
    If bMotorWaitTime = 0 Then
 
       Call MotorControl()
+   End If
+
+
+   If wMotorDriveTime = 0 Then
+
+      Call MotorStop()
    End If
 
 
